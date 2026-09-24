@@ -659,97 +659,8 @@ export function runPageOperation(
     return value?.replace(/\s+/g, " ").trim() ?? "";
   }
 
-  function implicitRole(element) {
-    const tagName = element.tagName.toLowerCase();
-
-    if (/^h[1-6]$/.test(tagName)) {
-      return "heading";
-    }
-
-    if (tagName === "a" && element.hasAttribute("href")) {
-      return "link";
-    }
-
-    if (tagName === "button") {
-      return "button";
-    }
-
-    if (tagName === "textarea") {
-      return "textbox";
-    }
-
-    if (tagName === "select") {
-      return "combobox";
-    }
-
-    if (tagName === "input") {
-      const type =
-        (element.getAttribute("type") ?? "text").toLowerCase();
-
-      if (type === "checkbox" || type === "radio") {
-        return type;
-      }
-
-      if (
-        type === "button" ||
-        type === "submit" ||
-        type === "reset"
-      ) {
-        return "button";
-      }
-
-      return "textbox";
-    }
-
-    return element.getAttribute("contenteditable") === "true"
-      ? "textbox"
-      : null;
-  }
-
   function accessibleName(element) {
-    const ariaLabel = normalizeText(
-      element.getAttribute("aria-label")
-    );
-
-    if (ariaLabel) {
-      return ariaLabel;
-    }
-
-    const labelledBy = element.getAttribute("aria-labelledby");
-
-    if (labelledBy) {
-      const label = normalizeText(
-        labelledBy
-          .split(/\s+/)
-          .map(id => document.getElementById(id)?.textContent)
-          .filter(Boolean)
-          .join(" ")
-      );
-
-      if (label) {
-        return label;
-      }
-    }
-
-    const associatedLabel = element.labels?.[0];
-
-    if (associatedLabel) {
-      const label = normalizeText(associatedLabel.textContent);
-
-      if (label) {
-        return label;
-      }
-    }
-
-    for (const attribute of ["alt", "title", "placeholder"]) {
-      const value = normalizeText(element.getAttribute(attribute));
-
-      if (value) {
-        return value;
-      }
-    }
-
-    return normalizeText(element.textContent);
+    return dependencies.getElementAccessibleNameText(element, false);
   }
 
   function isVisible(element) {
@@ -771,8 +682,34 @@ export function runPageOperation(
       : normalizedActual.includes(normalizedExpected);
   }
 
-  function descendants(roots) {
-    return roots.flatMap(root => [...root.querySelectorAll("*")]);
+  function descendants(roots, selector = "*") {
+    return roots.flatMap(root => {
+      const matches = [...root.querySelectorAll(selector)];
+      for (const element of [root, ...root.querySelectorAll("*")]) {
+        if (element.shadowRoot) {
+          matches.push(...descendants([element.shadowRoot], selector));
+        }
+        if (element.tagName === "IFRAME") {
+          try {
+            if (element.contentDocument) {
+              matches.push(...descendants([element.contentDocument], selector));
+            }
+          } catch (error) {
+            // Cross-origin frames are unavailable to page JavaScript.
+          }
+        }
+      }
+      return matches;
+    });
+  }
+
+  function isHiddenForAria(element) {
+    for (let current = element; current; current = current.ownerDocument.defaultView?.frameElement) {
+      if (dependencies.isElementHiddenForAria(current)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   function resolveLocator(steps) {
@@ -791,14 +728,12 @@ export function runPageOperation(
 
       switch (step.type) {
         case "css":
-          roots = roots.flatMap(root => [
-            ...root.querySelectorAll(step.selector)
-          ]);
+          roots = descendants(roots, step.selector);
           break;
         case "role":
           roots = candidates.filter(element =>
-            (element.getAttribute("role") || implicitRole(element)) ===
-              step.role &&
+            !isHiddenForAria(element) &&
+            dependencies.getAriaRole(element) === step.role &&
             (
               step.name === undefined ||
               matchesText(
@@ -900,6 +835,10 @@ export function runPageOperation(
   }
 
   function fillElement(element, value) {
+    if (element.readOnly) {
+      throw new Error("element_readonly");
+    }
+
     if (isContentEditable(element)) {
       fillContentEditable(element, value);
       return;
@@ -1613,12 +1552,7 @@ export function runPageOperation(
       documentId: pageDocumentId(),
       navigationPending: pageNavigationPending(),
       readyState: document.readyState,
-      url: window.location.href,
-      webmcpPending: Array.isArray(
-        window.__safari_browser_use_webmcp_captures__
-      )
-        ? window.__safari_browser_use_webmcp_captures__.length
-        : 0
+      url: window.location.href
     };
   }
 
@@ -1764,6 +1698,9 @@ export function runPageOperation(
   ]);
 
   if (pointerOperations.has(operation)) {
+    if (element.matches(":disabled")) {
+      throw new Error("element_disabled");
+    }
     moveControlCursorToElement(element, params);
     if (operation !== "click") {
       highlightElement(element);
@@ -1872,15 +1809,73 @@ export function runPageOperation(
       }
 
       element.focus?.();
-      element.dispatchEvent(new window.KeyboardEvent("keydown", {
-        key,
-        bubbles: true
-      }));
-      element.dispatchEvent(new window.KeyboardEvent("keyup", {
-        key,
-        bubbles: true
-      }));
-      return { pressed: true, trusted: false };
+      const form = element.form;
+      const initialUrl = window.location.href;
+      let submissionObserved = false;
+      let navigationExpected = false;
+      let transition = null;
+      const observeSubmission = () => { submissionObserved = true; };
+      const dispatchKey = type => element.dispatchEvent(
+        new window.KeyboardEvent(type, {
+          key,
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          ...(key === "Enter" ? {
+            code: "Enter", keyCode: 13, which: 13,
+            charCode: type === "keypress" ? 13 : 0
+          } : {})
+        })
+      );
+      form?.addEventListener("submit", observeSubmission, true);
+      form?.addEventListener("invalid", observeSubmission, true);
+
+      try {
+        const allowed = dispatchKey("keydown");
+        const enterAllowed = key === "Enter" && allowed && dispatchKey("keypress");
+        const blockingTypes = new Set([
+          "text", "search", "tel", "url", "email", "password",
+          "date", "month", "week", "time", "datetime-local", "number"
+        ]);
+
+        if (
+          enterAllowed && !submissionObserved && form &&
+          element.isConnected && element.form === form &&
+          element.tagName.toLowerCase() === "input" &&
+          blockingTypes.has(element.type) &&
+          window.location.href === initialUrl
+        ) {
+          const controls = [...element.getRootNode().querySelectorAll("input, button")]
+            .filter(control => control.form === form);
+          const submitter = controls.find(control =>
+            control.type === "submit" || control.type === "image"
+          );
+
+          if (submitter) {
+            if (!submitter.matches(":disabled")) {
+              transition = navigationTransition(submitter);
+              navigationExpected = transition?.kind === "same-tab";
+              submitter.click();
+            }
+          } else if (controls.filter(control =>
+            control.tagName.toLowerCase() === "input" && blockingTypes.has(control.type)
+          ).length === 1) {
+            navigationExpected = true;
+            window.HTMLFormElement.prototype.requestSubmit.call(form);
+          }
+        }
+
+        dispatchKey("keyup");
+      } finally {
+        form?.removeEventListener("submit", observeSubmission, true);
+        form?.removeEventListener("invalid", observeSubmission, true);
+      }
+
+      return {
+        pressed: true, trusted: false,
+        ...(navigationExpected ? { navigationExpected } : {}),
+        ...(transition ? { transition } : {})
+      };
     }
     case "scrollIntoView": {
       const options = params.options || {};
@@ -1899,18 +1894,17 @@ export function runPageOperation(
     case "isVisible":
       return isVisible(element);
     case "isEnabled":
-      return !element.disabled;
+      return !element.matches(":disabled");
     case "setChecked":
       if (!("checked" in element)) {
         throw new Error("element_not_checkable");
       }
-      element.checked = Boolean(params.checked);
-      element.dispatchEvent(
-        new window.Event("input", { bubbles: true })
-      );
-      element.dispatchEvent(
-        new window.Event("change", { bubbles: true })
-      );
+      if (element.checked !== Boolean(params.checked)) {
+        element.click();
+      }
+      if (element.checked !== Boolean(params.checked)) {
+        throw new Error("checked_state_not_changed");
+      }
       return { checked: element.checked };
     case "selectOption": {
       if (element.tagName.toLowerCase() !== "select") {

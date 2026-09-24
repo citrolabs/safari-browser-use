@@ -7,8 +7,8 @@ License 2.0 in this directory.
 ## Layout
 
 - `packages/` contains the copied Playwright source files.
-- `safari-browser-use-entry.ts` exposes the single browser-side `snapshot`
-  function used by Safari Browser Use.
+- `safari-browser-use-entry.ts` exposes the browser-side `snapshot` function
+  and the same role, accessible-name, and hidden-state helpers used by locators.
 - `tsconfig.json` resolves Playwright's internal imports during bundling.
 - `../../scripts/build-playwright-aria-snapshot.mjs` creates the in-memory
   browser bundle consumed by the main plugin build and tests.

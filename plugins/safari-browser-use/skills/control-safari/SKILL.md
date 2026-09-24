@@ -1,11 +1,11 @@
 ---
 name: control-safari
-description: Control the user's existing Safari 26 tabs through a persistent JavaScript REPL with a Playwright-style browser API. Use when a task must inspect, navigate, click, fill, select, or verify a page in Safari while preserving the user's current logins and browser state.
+description: Control the user's existing Safari tabs through a persistent JavaScript REPL with a Playwright-style browser API. Use when a task must inspect, navigate, click, fill, select, or verify a page in Safari while preserving the user's current logins and browser state.
 ---
 
 # Control Safari
 
-Use this skill for Safari 26 automation: inspecting pages, navigating, testing
+Use this skill for Safari automation: inspecting pages, navigating, testing
 local apps, clicking, typing, filling forms, capturing a `<canvas>`, and reading
 visible page state. Safari is the user's real browser, so their tabs, logins,
 and in-progress work are live. Preserve that state.
@@ -27,9 +27,10 @@ First, check the connection:
 browser.doctor()
 ```
 
-Stop if Safari is not version 26, `automationAvailable` is false, or
-`javascriptFromAppleEvents` is false. When the doctor reports a problem, read the
-runtime troubleshooting topic:
+Stop if `ready` is false. Safari 27 on macOS 27 uses this same runtime.
+An `unverified` Safari version status alone does not stop automation; follow
+the capability results. When the doctor reports a problem, read the runtime
+troubleshooting topic:
 
 ```js
 browser.documentation("troubleshooting")

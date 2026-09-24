@@ -1,7 +1,7 @@
 {
   "name": "safari-browser-use",
-  "version": "0.1.2-20260904",
-  "description": "Control the user's existing Safari 26 session with agent-written JavaScript.",
+  "version": "0.2.0",
+  "description": "Control the user's existing Safari session with agent-written JavaScript.",
   "author": {
     "name": "CitroLabs",
     "url": "https://github.com/citrolabs"
@@ -10,15 +10,15 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Safari Browser Use",
-    "shortDescription": "Control Safari 26 with agent-written code.",
-    "longDescription": "Safari Browser Use connects Codex to the user's existing Safari 26 session through a local MCP server and macOS Apple Events.",
+    "shortDescription": "Control Safari with agent-written code.",
+    "longDescription": "Safari Browser Use connects Codex to the user's existing Safari session through a local MCP server and macOS Apple Events.",
     "developerName": "CitroLabs",
     "category": "Productivity",
     "capabilities": [
       "Interactive",
       "Write"
     ],
-    "defaultPrompt": "Use Safari 26 in a new task tab by default, and only reuse a Safari tab when I explicitly request it."
+    "defaultPrompt": "Use Safari in a new task tab by default, and only reuse a Safari tab when I explicitly request it."
   },
   "mcpServers": "./.mcp.json"
 }

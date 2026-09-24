@@ -1,11 +1,13 @@
 {
   "name": "safari-browser-use",
-  "version": "0.1.2-20260904",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "node scripts/build-plugin.mjs",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "test:safari": "npm run build && SAFARI_LIVE_TEST=1 node --test tests/safari-live.test.mjs",
+    "test:safari:native": "npm run build && SAFARI_NATIVE_LIVE_TEST=1 node --test tests/safari-native-live.test.mjs"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",

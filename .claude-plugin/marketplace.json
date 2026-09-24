@@ -3,13 +3,13 @@
   "owner": {
     "name": "CitroLabs"
   },
-  "description": "Safari 26 browser automation for Codex and Claude Code.",
+  "description": "Safari browser automation for Codex and Claude Code.",
   "plugins": [
     {
       "name": "safari-browser-use",
       "source": "./plugins/safari-browser-use",
-      "description": "Control the user's existing Safari 26 session with agent-written JavaScript.",
-      "version": "0.1.2-20260904"
+      "description": "Control the user's existing Safari session with agent-written JavaScript.",
+      "version": "0.2.0"
     }
   ]
 }

@@ -150,7 +150,7 @@ class McpRuntime {
       capabilities: {},
       clientInfo: {
         name: "safari-browser-use-skill",
-        version: "0.1.2-20260904"
+        version: "0.2.0"
       }
     });
   }

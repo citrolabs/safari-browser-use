@@ -1,8 +1,8 @@
 {
   "name": "safari-browser-use",
-  "version": "0.1.2-20260904",
+  "version": "0.2.0",
   "displayName": "Safari Browser Use",
-  "description": "Control the user's existing Safari 26 session with agent-written JavaScript.",
+  "description": "Control the user's existing Safari session with agent-written JavaScript.",
   "author": {
     "name": "CitroLabs",
     "url": "https://github.com/citrolabs"

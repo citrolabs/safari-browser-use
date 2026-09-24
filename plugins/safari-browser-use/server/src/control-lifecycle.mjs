@@ -132,6 +132,8 @@ export function restoreControlAfterNavigation(options) {
 
       if (
         verified.documentId === state.documentId &&
+        verified.url === verified.tabUrl &&
+        verified.navigationPending !== true &&
         verified.controlVisible
       ) {
         return result(
@@ -188,6 +190,14 @@ export function restoreControlAfterNavigation(options) {
         settleResult = null;
       }
 
+      if (!pageMatchesTab || state.navigationPending === true) {
+        navigationStarted = true;
+        settleKey = null;
+        settleResult = null;
+        sleep(intervalMs);
+        continue;
+      }
+
       if (changed) {
         navigationStarted = true;
         const restored = settled(restoreAndVerify(
@@ -218,8 +228,6 @@ export function restoreControlAfterNavigation(options) {
         if (restored) {
           return restored;
         }
-      } else if (tabUrlChanged) {
-        navigationStarted = true;
       } else if (!navigationStarted && now() >= changeDeadline) {
         return result(false, false, state.documentId, false);
       }

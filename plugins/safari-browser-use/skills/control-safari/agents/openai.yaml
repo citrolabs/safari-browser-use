@@ -1,4 +1,4 @@
 interface:
   display_name: "Control Safari"
-  short_description: "Control Safari 26 through a persistent JS REPL"
+  short_description: "Control Safari through a persistent JS REPL"
   default_prompt: "Use $control-safari in a new task tab by default, and only reuse a Safari tab when I explicitly request it."

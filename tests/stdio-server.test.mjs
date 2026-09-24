@@ -214,7 +214,7 @@ test("returns the operating guide at runtime over stdio", async t => {
   assert.match(unknownText, /troubleshooting/);
 });
 
-test("advertises dynamic site tools and exposes the automation switches", async t => {
+test("exposes only REPL tools without API learning controls", async t => {
   const entrypoint = process.env.MCP_ENTRYPOINT ?? fileURLToPath(new URL(
     "../plugins/safari-browser-use/dist/safari-repl.jxa.js",
     import.meta.url
@@ -235,47 +235,17 @@ test("advertises dynamic site tools and exposes the automation switches", async 
 
   await client.connect(transport);
 
-  assert.equal(client.getServerCapabilities()?.tools?.listChanged, true);
+  assert.notEqual(client.getServerCapabilities()?.tools?.listChanged, true);
 
   const before = await client.listTools();
   assert.deepEqual(before.tools.map(tool => tool.name), ["js", "js_reset"]);
 
-  const auto = await client.callTool({
+  const api = await client.callTool({
     name: "js",
     arguments: {
-      title: "Read automation switches",
-      code: "browser.webmcp.auto()"
+      title: "Verify removed API learning controls",
+      code: "typeof browser.webmcp"
     }
   });
-  assert.deepEqual(auto.structuredContent.value, {
-    record: true, probe: true, suggest: true, expose: true, remember: true
-  });
-
-  const imported = await client.callTool({
-    name: "js",
-    arguments: {
-      title: "Import a remembered site skeleton",
-      code: [
-        "browser.webmcp.auto({ remember: false });",
-        "browser.webmcp.import({ format: 'webmcp-site-memory', version: 1, site: 'memory-test.invalid', endpoints: [",
-        "  { key: 'GET api.memory-test.invalid/v1/feed', method: 'GET', origin: 'https://api.memory-test.invalid',",
-        "    templatePath: '/v1/feed', toolName: 'get_v1_feed', probeUrl: 'https://api.memory-test.invalid/v1/feed?page=1',",
-        "    score: 6, tier: 'data', lastSeen: 1, sessions: 1 }",
-        "] })"
-      ].join("\n")
-    }
-  });
-  assert.deepEqual(imported.structuredContent.value, {
-    site: "memory-test.invalid",
-    remembered: 1
-  });
-
-  const listed = await client.callTool({
-    name: "js",
-    arguments: {
-      title: "List remembered tools",
-      code: "browser.webmcp.sites().map(function (s) { return s.site; })"
-    }
-  });
-  assert.deepEqual(listed.structuredContent.value, ["memory-test.invalid"]);
+  assert.equal(api.structuredContent.value, "undefined");
 });

@@ -59,10 +59,6 @@ const tabIdentityPath = resolve(
   repositoryRoot,
   "plugins/safari-browser-use/server/src/tab-identity.mjs"
 );
-const webmcpCatalogPath = resolve(
-  repositoryRoot,
-  "plugins/safari-browser-use/server/src/webmcp-catalog.mjs"
-);
 const webmcpPagePath = resolve(
   repositoryRoot,
   "plugins/safari-browser-use/server/src/webmcp-page.mjs"
@@ -115,7 +111,6 @@ export async function buildPlugin({
     googleWorkspaceEditor,
     controlLifecycle,
     tabIdentity,
-    webmcpCatalog,
     webmcpPage,
     documentation,
     troubleshooting
@@ -132,7 +127,6 @@ export async function buildPlugin({
     readFile(googleWorkspaceEditorPath, "utf8"),
     readFile(controlLifecyclePath, "utf8"),
     readFile(tabIdentityPath, "utf8"),
-    readFile(webmcpCatalogPath, "utf8"),
     readFile(webmcpPagePath, "utf8"),
     readFile(documentationPath, "utf8"),
     readFile(troubleshootingPath, "utf8")
@@ -159,7 +153,6 @@ export async function buildPlugin({
     ],
     ["/*__SBU_CONTROL_LIFECYCLE__*/", withoutExports(controlLifecycle)],
     ["/*__SBU_TAB_IDENTITY__*/", withoutExports(tabIdentity)],
-    ["/*__SBU_WEBMCP_CATALOG__*/", withoutExports(webmcpCatalog)],
     ["/*__SBU_WEBMCP_PAGE__*/", withoutExports(webmcpPage)],
     [
       "/*__SBU_DOCUMENTATION__*/",

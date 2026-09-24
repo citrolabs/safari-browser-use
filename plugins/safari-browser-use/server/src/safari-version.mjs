@@ -1,4 +1,4 @@
-const MAX_SUPPORTED_SAFARI_MAJOR = 26;
+const LATEST_KNOWN_SAFARI_MAJOR = 27;
 
 export function parseSafariMajor(version) {
   const match = /^(\d+)(?:\.|$)/.exec(version);
@@ -13,13 +13,10 @@ export function parseSafariMajor(version) {
 export function evaluateSafariVersion(version) {
   const major = parseSafariMajor(version);
 
-  if (major <= MAX_SUPPORTED_SAFARI_MAJOR) {
-    return { supported: true, major, reason: null };
-  }
-
   return {
-    supported: false,
+    supported: true,
     major,
-    reason: `Safari ${major} includes a native MCP server; use /usr/bin/safaridriver --mcp.`
+    known: major <= LATEST_KNOWN_SAFARI_MAJOR,
+    reason: null
   };
 }

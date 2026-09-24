@@ -374,3 +374,29 @@ test("does not settle a load while the redirected document is replacing", async 
     url: "https://example.com/final"
   }, "https://example.com/final", 200), true);
 });
+
+for (const reason of ["URL mismatch", "pending unload"]) {
+  test(`does not restore control on an intermediate document with ${reason}`, async () => {
+    const { restoreControlAfterNavigation } = await import(lifecycleModule);
+    let clock = 0;
+    const result = restoreControlAfterNavigation({
+      initialDocumentId: "initial", initialUrl: "https://example.com/start",
+      inspect() {
+        const intermediate = clock < 300;
+        return {
+          controlVisible: true,
+          documentId: intermediate ? "intermediate" : "final",
+          readyState: "complete",
+          navigationPending: intermediate && reason === "pending unload",
+          url: intermediate && reason === "URL mismatch"
+            ? "https://example.com/intermediate" : "https://example.com/final",
+          tabUrl: "https://example.com/final"
+        };
+      },
+      restore() {}, now: () => clock,
+      sleep(milliseconds) { clock += milliseconds; },
+      settleTimeMs: 100, timeoutMs: 1000
+    });
+    assert.equal(result.documentId, "final");
+  });
+}

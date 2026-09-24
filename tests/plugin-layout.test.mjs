@@ -26,7 +26,7 @@ test("all client manifests expose the shared skill and native MCP config", async
     const manifest = await readJson(path);
 
     assert.equal(manifest.name, "safari-browser-use");
-    assert.equal(manifest.version, "0.1.2-20260904");
+    assert.equal(manifest.version, "0.2.0");
     sharedVersion ??= manifest.version;
     assert.equal(manifest.version, sharedVersion);
     assert.equal(manifest.skills, "./skills/");
@@ -114,7 +114,7 @@ test("the Claude marketplace publishes the shared plugin directory", async () =>
   );
 
   assert.equal(marketplace.name, "citrolabs");
-  assert.match(marketplace.description, /Safari 26/);
+  assert.match(marketplace.description, /Safari browser automation/);
   assert.deepEqual(marketplace.plugins.map(plugin => ({
     name: plugin.name,
     source: plugin.source
@@ -145,7 +145,7 @@ test("GitHub Copilot and Cursor marketplaces publish the shared plugin directory
   })), [{
     name: "safari-browser-use",
     source: "./plugins/safari-browser-use",
-    version: "0.1.2-20260904"
+    version: "0.2.0"
   }]);
 
   const cursor = await readRepositoryJson(
@@ -515,7 +515,7 @@ test("ships without a Safari app or Web Extension", async () => {
   assert.deepEqual(packageJson.dependencies ?? {}, {});
 });
 
-test("runtime guide documents Site API Tools recording and replay rules", async () => {
+test("runtime guide documents native WebMCP without API conversion", async () => {
   const documentation = await readFile(
     new URL(
       "../plugins/safari-browser-use/server/src/documentation.md",
@@ -524,14 +524,14 @@ test("runtime guide documents Site API Tools recording and replay rules", async 
     "utf8"
   );
 
-  assert.match(documentation, /## Site API Tools \(WebMCP\)/);
-  assert.match(documentation, /tab\.webmcp\.record\(\)/);
+  assert.match(documentation, /## Native WebMCP/);
+  assert.match(documentation, /document\.modelContext\.getTools\(\)/);
+  assert.match(documentation, /document\.modelContext\.executeTool\(\)/);
+  assert.match(documentation, /tab\.webmcp\.pageTools\(\)/);
   assert.match(documentation, /tab\.webmcp\.callTool\(/);
-  assert.match(documentation, /User tabs are never recorded/);
-  assert.match(documentation, /# webmcp:/);
-  assert.match(documentation, /browser\.webmcp\.auto\(/);
+  assert.match(documentation, /available: false, tools: \[\]/);
   assert.match(documentation, /\{ confirmed: true \}/);
-  assert.match(documentation, /«redacted»/);
-  assert.match(documentation, /browser\.webmcp\.export\(site\)/);
   assert.match(documentation, /untrusted web content/);
+  assert.doesNotMatch(documentation, /browser\.webmcp\.|tab\.webmcp\.(?:record|probe|suggest|describe|status|stop)\(/);
+  assert.doesNotMatch(documentation, /# webmcp:|web__<site>|learns those APIs automatically/);
 });

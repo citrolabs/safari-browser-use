@@ -26,15 +26,19 @@ function createSnapshotPage(html) {
   window.eval(
     snapshotBundle +
       "\nwindow.__sbuAriaSnapshot = " +
-      "SBUPlaywrightAriaSnapshot.snapshot;"
+      "SBUPlaywrightAriaSnapshot;"
   );
   const dependencies = {
-    ariaSnapshot: window.__sbuAriaSnapshot
+    ...window.__sbuAriaSnapshot,
+    ariaSnapshot: window.__sbuAriaSnapshot.snapshot
   };
   delete window.__sbuAriaSnapshot;
 
   return {
     window,
+    execute(method, params = {}) {
+      return runPageOperation(window.document, window, method, params, dependencies);
+    },
     snapshot(params = {}) {
       return runPageOperation(
         window.document,
@@ -192,4 +196,75 @@ test("includes same-origin iframe content", () => {
       '  - button "Frame action"'
     ].join("\n")
   );
+});
+
+for (const kind of ["shadow", "iframe"]) {
+  test(`locates and clicks a ${kind} button shown in the snapshot`, async t => {
+    const page = createSnapshotPage('<div id="host"></div><iframe></iframe>');
+    t.after(() => page.window.happyDOM.abort());
+    const root = kind === "shadow"
+      ? page.window.document.querySelector("#host").attachShadow({ mode: "open" })
+      : page.window.document.querySelector("iframe").contentDocument.body;
+    root.innerHTML = '<button>Nested action</button>';
+    root.ownerDocument.documentElement.style.visibility = "visible";
+    let clicks = 0;
+    root.querySelector("button").addEventListener("click", () => clicks++);
+    const scope = kind === "shadow" ? "#host" : "iframe";
+    const locator = [
+      { type: "css", selector: scope },
+      { type: "role", role: "button", name: "Nested action", exact: true }
+    ];
+
+    assert.match(page.snapshot(), /button "Nested action"/);
+    assert.equal(page.execute("playwright.locator.count", { locator }), 1);
+    page.execute("playwright.locator.click", { locator });
+    assert.equal(clicks, 1);
+    assert.equal(page.execute("playwright.locator.count", {
+      locator: [{ type: "css", selector: scope }, { type: "css", selector: "button" }]
+    }), 1);
+  });
+}
+
+for (const [type, role] of [["number", "spinbutton"], ["search", "searchbox"]]) {
+  test(`fills a native ${type} input using the role shown in its snapshot`, async t => {
+    const page = createSnapshotPage(`<input type="${type}" aria-label="Value">`);
+    t.after(() => page.window.happyDOM.abort());
+    const locator = [{ type: "role", role, name: "Value", exact: true }];
+
+    assert.match(page.snapshot(), new RegExp(`${role} "Value"`));
+    page.execute("playwright.locator.fill", { locator, value: "42" });
+    assert.equal(page.window.document.querySelector("input").value, "42");
+    assert.match(page.snapshot(), /42/);
+  });
+}
+
+for (const hidden of ['style="display:none"', 'aria-hidden="true"']) {
+  test(`ignores a duplicate action inside a ${hidden} ancestor`, async t => {
+    const page = createSnapshotPage(`
+      <section ${hidden}><button>Continue</button></section>
+      <button>Continue</button>
+    `);
+    t.after(() => page.window.happyDOM.abort());
+    const clicked = [];
+    page.window.document.querySelectorAll("button").forEach((button, index) => {
+      button.addEventListener("click", () => clicked.push(index));
+    });
+    const locator = [{ type: "role", role: "button", name: "Continue", exact: true }];
+
+    assert.equal((page.snapshot().match(/button "Continue"/g) || []).length, 1);
+    page.execute("playwright.locator.click", { locator });
+    assert.deepEqual(clicked, [1]);
+  });
+}
+
+test("uses the same accessible name precedence as the snapshot", async t => {
+  const page = createSnapshotPage(`
+    <span id="label">Visible name</span>
+    <button aria-label="Other name" aria-labelledby="label">Action</button>
+  `);
+  t.after(() => page.window.happyDOM.abort());
+  assert.match(page.snapshot(), /button "Visible name"/);
+  assert.equal(page.execute("playwright.locator.count", {
+    locator: [{ type: "role", role: "button", name: "Visible name", exact: true }]
+  }), 1);
 });

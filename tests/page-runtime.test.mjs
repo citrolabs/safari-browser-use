@@ -6,6 +6,11 @@ import { Window } from "happy-dom";
 import {
   runPageOperation
 } from "../plugins/safari-browser-use/server/src/page-runtime.mjs";
+import {
+  buildPlaywrightAriaSnapshot
+} from "../scripts/build-playwright-aria-snapshot.mjs";
+
+const snapshotBundle = await buildPlaywrightAriaSnapshot();
 
 function createPage(html) {
   const window = new Window({
@@ -13,6 +18,9 @@ function createPage(html) {
   });
   window.document.documentElement.style.visibility = "visible";
   window.document.body.innerHTML = html;
+  window.eval(snapshotBundle + "\nwindow.__sbuAria = SBUPlaywrightAriaSnapshot;");
+  const dependencies = window.__sbuAria;
+  delete window.__sbuAria;
 
   return {
     window,
@@ -21,7 +29,8 @@ function createPage(html) {
         window.document,
         window,
         method,
-        params
+        params,
+        dependencies
       );
     }
   };
@@ -601,6 +610,104 @@ test("reports supported key events as synthetic", () => {
     }
   );
 });
+
+test("Enter activates the form's default submitter once", () => {
+  const { execute, window } = createPage(`
+    <form><input type="search" value="上海">
+      <button name="action" value="search">Search</button>
+      <button name="action" value="other">Other</button>
+    </form>
+  `);
+  const form = window.document.querySelector("form");
+  const submitters = [];
+  const keys = [];
+  form.addEventListener("submit", event => {
+    event.preventDefault();
+    submitters.push(event.submitter.value);
+  });
+  form.addEventListener("keydown", event => {
+    keys.push([event.key, event.code, event.keyCode, event.which, event.cancelable]);
+  });
+
+  execute("playwright.locator.press", {
+    locator: [{ type: "css", selector: "input" }], value: "Enter"
+  });
+
+  assert.deepEqual(submitters, ["search"]);
+  assert.deepEqual(keys, [["Enter", "Enter", 13, 13, true]]);
+});
+
+test("Enter submits a single-field form without a submit button", () => {
+  const { execute, window } = createPage(`<form><input value="上海"></form>`);
+  let submissions = 0;
+  window.document.querySelector("form").addEventListener("submit", event => {
+    event.preventDefault();
+    submissions++;
+  });
+  execute("playwright.locator.press", {
+    locator: [{ type: "css", selector: "input" }], value: "Enter"
+  });
+  assert.equal(submissions, 1);
+});
+
+for (const eventType of ["keydown", "keypress"]) {
+  test(`Enter respects ${eventType} cancellation`, () => {
+    const { execute, window } = createPage(`<form><input><button>Search</button></form>`);
+    const form = window.document.querySelector("form");
+    let cancelled = false;
+    let submissions = 0;
+    form.addEventListener(eventType, event => {
+      event.preventDefault();
+      cancelled = event.defaultPrevented;
+    });
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      submissions++;
+    });
+    execute("playwright.locator.press", {
+      locator: [{ type: "css", selector: "input" }], value: "Enter"
+    });
+    assert.equal(cancelled, true);
+    assert.equal(submissions, 0);
+  });
+}
+
+test("Enter does not repeat submission performed by a keyboard handler", () => {
+  const { execute, window } = createPage(`<form><input><button>Search</button></form>`);
+  const form = window.document.querySelector("form");
+  let submissions = 0;
+  form.addEventListener("keydown", () => form.requestSubmit());
+  form.addEventListener("submit", event => {
+    event.preventDefault();
+    submissions++;
+  });
+  execute("playwright.locator.press", {
+    locator: [{ type: "css", selector: "input" }], value: "Enter"
+  });
+  assert.equal(submissions, 1);
+});
+
+for (const [name, html, selector] of [
+  ["invalid form", '<input required><button>Search</button>', "input"],
+  ["disabled default button", '<input><button disabled>Search</button><button>Other</button>', "input"],
+  ["multiple fields without a submitter", '<input><input>', "input:first-child"],
+  ["textarea", '<textarea></textarea><button>Save</button>', "textarea"],
+  ["checkbox", '<input type="checkbox"><button>Save</button>', "input"],
+  ["rich text editor", '<div contenteditable="true">Text</div><button>Save</button>', "div"]
+]) {
+  test(`Enter does not submit ${name}`, () => {
+    const { execute, window } = createPage(`<form>${html}</form>`);
+    let submissions = 0;
+    window.document.querySelector("form").addEventListener("submit", event => {
+      event.preventDefault();
+      submissions++;
+    });
+    execute("playwright.locator.press", {
+      locator: [{ type: "css", selector }], value: "Enter"
+    });
+    assert.equal(submissions, 0);
+  });
+}
 
 test("marks same-tab link clicks as navigation-capable", () => {
   const { execute, window } = createPage(`
@@ -1666,4 +1773,61 @@ test("does not highlight read-only reads", () => {
     ),
     null
   );
+});
+
+for (const attribute of ["readonly", "disabled"]) {
+  test(`rejects filling a ${attribute} input without changing its value`, () => {
+    const { execute, window } = createPage(`<input ${attribute} value="locked">`);
+    const input = window.document.querySelector("input");
+    let inputs = 0;
+    input.addEventListener("input", () => inputs++);
+
+    assert.throws(() => execute("playwright.locator.fill", {
+      locator: [{ type: "css", selector: "input" }],
+      value: "changed"
+    }), /element_(?:disabled|readonly)/);
+    assert.equal(input.value, "locked");
+    assert.equal(inputs, 0);
+  });
+}
+
+test("rejects clicking a disabled button", () => {
+  const { execute } = createPage('<button disabled>Save</button>');
+  assert.throws(() => execute("playwright.locator.click", {
+    locator: [{ type: "role", role: "button", name: "Save" }]
+  }), /element_disabled/);
+});
+
+test("locates the implicit status role of an output element", () => {
+  const { execute } = createPage('<output>ready</output>');
+  const locator = [{ type: "role", role: "status" }];
+  assert.equal(execute("playwright.locator.count", { locator }), 1);
+  assert.equal(execute("playwright.locator.textContent", { locator }), "ready");
+});
+
+test("checking a checkbox activates business handlers only when its state changes", () => {
+  const { execute, window } = createPage('<input type="checkbox">');
+  const input = window.document.querySelector("input");
+  const events = [];
+  for (const type of ["click", "input", "change"]) {
+    input.addEventListener(type, () => events.push(type));
+  }
+  const locator = [{ type: "css", selector: "input" }];
+  assert.deepEqual(execute("playwright.locator.setChecked", {
+    locator, checked: true
+  }), { checked: true });
+  assert.deepEqual(events, ["click", "input", "change"]);
+  execute("playwright.locator.setChecked", { locator, checked: true });
+  assert.deepEqual(events, ["click", "input", "change"]);
+  execute("playwright.locator.setChecked", { locator, checked: false });
+  assert.equal(input.checked, false);
+  assert.deepEqual(events, ["click", "input", "change", "click", "input", "change"]);
+});
+
+test("does not report success when a checkbox click is cancelled", () => {
+  const { execute, window } = createPage('<input type="checkbox">');
+  window.document.querySelector("input").addEventListener("click", event => event.preventDefault());
+  assert.throws(() => execute("playwright.locator.setChecked", {
+    locator: [{ type: "css", selector: "input" }], checked: true
+  }), /checked_state_not_changed/);
 });

@@ -2,11 +2,11 @@
 
 <img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=6,11,20&height=220&section=header&text=Safari%20Browser%20Use&fontSize=52&fontColor=ffffff&animation=fadeIn&fontAlignY=38&desc=Native%20Safari%20Automation%20for%20AI%20Agents&descAlignY=60&descSize=18" width="100%" alt="Safari Browser Use"/>
 
-**Control your existing Safari 26 tabs with AI agents — no browser extension or companion app required.**
+**Control your existing Safari tabs with a persistent JavaScript REPL, including on macOS 27.**
 
-[![Version](https://img.shields.io/badge/Version-0.1.2--20260902-6C63FF?style=for-the-badge)](https://github.com/citrolabs/safari-browser-use)
+[![Version](https://img.shields.io/badge/Version-0.2.0-6C63FF?style=for-the-badge)](https://github.com/citrolabs/safari-browser-use)
 [![macOS](https://img.shields.io/badge/macOS-Required-000000?style=for-the-badge&logo=apple&logoColor=white)](https://www.apple.com/macos/)
-[![Safari](https://img.shields.io/badge/Safari-26-006CFF?style=for-the-badge&logo=safari&logoColor=white)](https://www.apple.com/safari/)
+[![Safari](https://img.shields.io/badge/Safari-26%20%7C%2027-006CFF?style=for-the-badge&logo=safari&logoColor=white)](https://www.apple.com/safari/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-00C4CC?style=for-the-badge)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/citrolabs/safari-browser-use?style=for-the-badge&logo=github&color=FFD700)](https://github.com/citrolabs/safari-browser-use/stargazers)
 [![GitHub followers](https://img.shields.io/github/followers/citrolabs?style=for-the-badge&logo=github&color=181717)](https://github.com/citrolabs)
@@ -25,12 +25,12 @@ Xcode, or an Apple Developer certificate. The Skill-only mode uses the Node.js
 runtime available to the agent to preserve its script session between calls.
 
 > [!NOTE]
-> **Safari version support:** Safari Browser Use supports Safari 26 and earlier
-> through Apple Events. Starting with Safari 27 beta, WebKit includes an
-> official Safari MCP server that lets any MCP-compatible agent connect
-> directly through `safaridriver --mcp`. Safari 27 users should prefer Apple's
-> native server. See
-> [Introducing the Safari MCP server for web developers](https://webkit.org/blog/18136/introducing-the-safari-mcp-server-for-web-developers/).
+> **macOS 27 and Safari 27 support:** The same persistent JavaScript REPL and
+> Apple Events runtime runs on Safari 27. Safari 26 and earlier retain their
+> existing compatibility. `browser.doctor()` checks Automation and webpage
+> JavaScript access and reports the macOS, Safari, and runtime versions.
+> Future Safari versions are marked unverified and use these same capability
+> checks. Browser control always uses this plugin's JavaScript runtime.
 
 ## Demo
 
@@ -206,7 +206,7 @@ the indicator in the new page before the same browser call returns.
 | 🌐 Existing Safari session | Work with your open tabs, cookies, and signed-in state |
 | ⚡ Persistent synchronous REPL | Reuse variables and browser state across tool calls |
 | 🎭 Playwright-style API | Locate elements by role, label, text, test ID, or attribute |
-| 📡 Site API Tools (WebMCP) | Task tabs learn the page's JSON APIs automatically, rank them by the data they return, point out which endpoint backs the visible list, and publish read endpoints as tools |
+| 📡 Native WebMCP | Discover and call tools through the browser's native WebMCP interface when available; unsupported pages continue through DOM automation without API recording or conversion |
 | ✨ Visible control indicator | See a perimeter glow and fake cursor while AI control is active |
 | 🔌 Plugin and Skill-only modes | Use native plugins or the standalone Agent Skill |
 | 🛡️ Deliberate interactions | Inspect first, target unique elements, and verify every action |
@@ -227,6 +227,9 @@ not remain attached indefinitely.
 Found a bug or have an idea? Open an
 [issue](https://github.com/citrolabs/safari-browser-use/issues) or explore
 more projects from [CitroLabs](https://github.com/citrolabs).
+
+For development setup and regression commands, see the
+[testing guide](tests/README.md).
 
 <div align="center">
 

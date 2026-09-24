@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "safari-browser-use",
-  "version": "0.1.2-20260904",
-  "description": "Control the user's existing Safari 26 session with agent-written JavaScript.",
+  "version": "0.2.0",
+  "description": "Control the user's existing Safari session with agent-written JavaScript.",
   "author": {
     "name": "CitroLabs",
     "url": "https://github.com/citrolabs"

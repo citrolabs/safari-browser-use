@@ -26,7 +26,7 @@ export function createToolDefinitions() {
   return [
     {
       name: "js",
-      description: "Run a synchronous JavaScript cell in the persistent Safari 26 REPL.",
+      description: "Run a synchronous JavaScript cell in the persistent Safari REPL.",
       inputSchema: replInputSchema,
       annotations: {
         readOnlyHint: false

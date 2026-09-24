@@ -53,7 +53,7 @@ async function loadNavigationRestorer() {
   return { context, events, template };
 }
 
-test("navigation inspection arms WebMCP while the replacement document is loading", async () => {
+test("navigation inspection does not install a recorder", async () => {
   const { context, events } = await loadNavigationRestorer();
   const identity = { id: "1:2" };
 
@@ -66,14 +66,10 @@ test("navigation inspection arms WebMCP while the replacement document is loadin
     { tabIdentity: identity }
   );
 
-  assert.deepEqual(events, [
-    "inspect:1:2",
-    "auto:1:2:1:2",
-    "ensure:1:2"
-  ]);
+  assert.deepEqual(events, ["inspect:1:2"]);
 });
 
-test("page navigation passes its task identity to early WebMCP recording", async () => {
+test("page navigation contains no recording hooks", async () => {
   const { template } = await loadNavigationRestorer();
   const start = template.indexOf('    if (method === "page.navigate") {');
   const end = template.indexOf(
@@ -83,30 +79,16 @@ test("page navigation passes its task identity to early WebMCP recording", async
   const navigation = template.slice(start, end);
 
   assert.ok(start >= 0 && end > start, "expected to find page.navigate handler");
-  assert.match(
-    navigation,
-    /restoreControlForNavigation\([\s\S]*?tabIdentity:\s*params\.tabIdentity/
-  );
+  assert.doesNotMatch(navigation, /drainWebmcp|maybeAutoRecord|ensureWebmcpRecorder/);
 });
 
-test("automatic recording opts task tabs into observed cross-site JSON recovery", async () => {
+test("runtime contains no learning, memory, replay, or dynamic tool machinery", async () => {
   const { template } = await loadNavigationRestorer();
-  const start = template.indexOf("  function maybeAutoRecord(");
-  const end = template.indexOf("  // Probe once per document", start);
-  const autoRecord = template.slice(start, end);
-  const probeStart = template.indexOf("  function maybeAutoProbe(");
-  const probeEnd = template.indexOf(
-    "  function annotateSnapshot(",
-    probeStart
-  );
-  const autoProbe = template.slice(probeStart, probeEnd);
-
-  assert.ok(start >= 0 && end > start, "expected to find maybeAutoRecord");
-  assert.ok(
-    probeStart >= 0 && probeEnd > probeStart,
-    "expected to find maybeAutoProbe"
-  );
-  assert.match(autoRecord, /recoverObservedCrossSiteJson:\s*true/);
-  assert.match(autoProbe, /entry\.options\.recoverObservedCrossSiteJson/);
-  assert.match(autoProbe, /observedCrossSiteJsonOnly:\s*true/);
+  for (const symbol of [
+    "createWebmcpStore", "webmcpAuto", "webmcpMemory", "probeWebmcp",
+    "startWebmcpRecording", "annotateSnapshot", "dynamicToolDefinitions",
+    "shapeWebmcpResult", "refreshWebmcpExposure"
+  ]) {
+    assert.equal(template.includes(symbol), false, `${symbol} must be removed`);
+  }
 });

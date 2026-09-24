@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import vm from "node:vm";
 
 import { buildPlugin } from "../scripts/build-plugin.mjs";
 import {
@@ -30,6 +31,109 @@ const windowBounds = {
   x: 1512,
   y: -259
 };
+
+test("uses the Safari window bounds when its script ID differs from the Core Graphics ID", async () => {
+  const template = await readFile(new URL(
+    "../plugins/safari-browser-use/server/src/jxa-server.template.js", import.meta.url
+  ), "utf8");
+  const actualBounds = { x: 81, y: 33, width: 1324, height: 949 };
+  const context = {
+    findTab: () => ({ window: { bounds: () => actualBounds } }),
+    parseTabId: () => ({ windowId: 39773 }),
+    ObjC: { deepUnwrap: value => value },
+    foundation: { CGWindowListCopyWindowInfo: () => [{
+      kCGWindowNumber: 39773, kCGWindowLayer: 0,
+      kCGWindowBounds: { X: 382, Y: 98, Width: 967, Height: 808 }
+    }] }
+  };
+  vm.runInNewContext(template.slice(
+    template.indexOf("  function nativeWindowBounds("),
+    template.indexOf("  function focusNativeTarget(")
+  ), context);
+  assert.deepEqual(JSON.parse(JSON.stringify(context.nativeWindowBounds("39773:26"))), actualBounds);
+});
+
+test("does not send native input when Safari fails to become frontmost", async () => {
+  const template = await readFile(new URL(
+    "../plugins/safari-browser-use/server/src/jxa-server.template.js", import.meta.url
+  ), "utf8");
+  const context = {
+    findTab: () => ({ window: {}, tab: {} }),
+    safari: { activate() {}, frontmost: () => false },
+    foundation: { NSThread: { sleepForTimeInterval() {} } },
+    currentTabMetadata: () => ({ id: "39773:26" })
+  };
+  vm.runInNewContext(template.slice(
+    template.indexOf("  function focusNativeTarget("),
+    template.indexOf("  function postNativeClick(")
+  ), context);
+  assert.throws(() => context.focusNativeTarget("39773:26"), /native_click_target_not_frontmost/);
+});
+
+for (const covered of [true, false]) {
+  test(`native focus ${covered ? "rejects a covering Safari dialog" : "accepts the visible target window"}`, async () => {
+    const template = await readFile(new URL(
+      "../plugins/safari-browser-use/server/src/jxa-server.template.js", import.meta.url
+    ), "utf8");
+    const context = {
+      findTab: () => ({ window: { bounds: () => ({ x: 81, y: 33, width: 1324, height: 949 }) }, tab: {} }),
+      safari: { activate() {}, frontmost: () => true },
+      foundation: { AXIsProcessTrusted: () => true, NSThread: { sleepForTimeInterval() {} } },
+      systemEvents: { processes: { byName: () => ({ windows: () => [{
+        position: () => covered ? [0, 33] : [81, 33],
+        size: () => covered ? [1512, 949] : [1324, 949],
+        subrole: () => covered ? "AXDialog" : "AXStandardWindow"
+      }] }) } },
+      currentTabMetadata: () => ({ id: "39773:26" })
+    };
+    vm.runInNewContext(template.slice(
+      template.indexOf("  function focusNativeTarget("),
+      template.indexOf("  function postNativeClick(")
+    ), context);
+    if (covered) assert.throws(() => context.focusNativeTarget("39773:26"), /native_click_target_not_frontmost/);
+    else assert.doesNotThrow(() => context.focusNativeTarget("39773:26"));
+  });
+}
+
+for (const trusted of [true, false]) {
+  test(`native mouse events ${trusted ? "reach the system event stream" : "require Accessibility permission"}`, async () => {
+    const template = await readFile(new URL(
+      "../plugins/safari-browser-use/server/src/jxa-server.template.js", import.meta.url
+    ), "utf8");
+    const posted = [];
+    const context = {
+      systemEvents: { processes: { byName: () => ({ exists: () => true, click() {} }) } },
+      foundation: {
+        AXIsProcessTrusted: () => trusted,
+        CGPointMake: (x, y) => ({ x, y }),
+        kCGEventMouseMoved: 5,
+        kCGEventLeftMouseDown: 1,
+        kCGEventLeftMouseUp: 2,
+        kCGMouseButtonLeft: 0,
+        kCGMouseEventClickState: 1,
+        kCGHIDEventTap: 0,
+        CGEventCreateMouseEvent: (source, type, point, button) => ({ type, point, button }),
+        CGEventSetIntegerValueField(event, field, value) { event.clickCount = value; },
+        CGEventPost(tap, event) { posted.push({ ...event }); },
+        CFRelease() { throw new Error("JXA owns the event reference"); },
+        NSThread: { sleepForTimeInterval() {} }
+      }
+    };
+    vm.runInNewContext(template.slice(
+      template.indexOf("  function postNativeClick("),
+      template.indexOf("  function saveNativeClipboard(")
+    ), context);
+    if (!trusted) {
+      assert.throws(() => context.postNativeClick({ x: 449, y: 320 }), /native_input_permission_denied/);
+      assert.deepEqual(posted, []);
+      return;
+    }
+    context.postNativeClick({ x: 449, y: 320 });
+    assert.deepEqual(posted.map(event => event.type), [5, 1, 2]);
+    assert.ok(posted.every(event => event.point.x === 449 && event.point.y === 320));
+    assert.deepEqual(posted.slice(1).map(event => event.clickCount), [1, 1]);
+  });
+}
 
 test("reports the viewport metrics needed for native input", () => {
   assert.deepEqual(
@@ -335,8 +439,8 @@ test("build exposes nativeClickAt without changing clickAt", async t => {
     /SafariPlaywright\.prototype\.clickAt/
   );
   assert.match(bundle, /Application\("System Events"\)/);
-  assert.match(bundle, /CGWindowListCopyWindowInfo/);
-  assert.match(bundle, /\.click\(\{ at: \[/);
+  assert.doesNotMatch(bundle, /CGWindowListCopyWindowInfo/);
+  assert.match(bundle, /CGEventPost/);
 });
 
 test("documents native input as an explicit cross-origin fallback", async () => {

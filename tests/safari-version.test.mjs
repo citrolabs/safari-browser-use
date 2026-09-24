@@ -14,6 +14,7 @@ test("accepts Safari 26", () => {
   assert.deepEqual(evaluateSafariVersion("26.5"), {
     supported: true,
     major: 26,
+    known: true,
     reason: null
   });
 });
@@ -22,15 +23,26 @@ test("accepts Safari versions older than 26", () => {
   assert.deepEqual(evaluateSafariVersion("25.6"), {
     supported: true,
     major: 25,
+    known: true,
     reason: null
   });
 });
 
-test("directs Safari 27 users to the native MCP server", () => {
+test("supports Safari 27 through the existing JavaScript runtime", () => {
   assert.deepEqual(evaluateSafariVersion("27.0"), {
-    supported: false,
+    supported: true,
     major: 27,
-    reason: "Safari 27 includes a native MCP server; use /usr/bin/safaridriver --mcp."
+    known: true,
+    reason: null
+  });
+});
+
+test("future Safari versions remain available with unverified compatibility", () => {
+  assert.deepEqual(evaluateSafariVersion("28.0"), {
+    supported: true,
+    major: 28,
+    known: false,
+    reason: null
   });
 });
 

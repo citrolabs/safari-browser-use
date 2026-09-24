@@ -30,9 +30,13 @@ export function collectTabs(
     }
 
     for (let tabIndex = 0; tabIndex < tabs.length; tabIndex++) {
-      result.push(
-        describeTab(window, tabs[tabIndex], tabIndex + 1)
-      );
+      try {
+        result.push(
+          describeTab(window, tabs[tabIndex], tabIndex + 1)
+        );
+      } catch (error) {
+        // Safari's indexed tab reference can disappear during enumeration.
+      }
     }
   }
 
@@ -84,6 +88,7 @@ export function createTabIdentity(metadata) {
 
 export function retargetTabIdentity(identity, url) {
   identity.url = String(url);
+  delete identity.documentId;
 }
 
 function updateTabIdentity(identity, metadata) {
@@ -95,7 +100,7 @@ function updateTabIdentity(identity, metadata) {
   return metadata;
 }
 
-export function completeTabNavigation(identity, metadata) {
+export function completeTabNavigation(identity, metadata, documentId) {
   const targetChanged = String(metadata.id) !== identity.id;
   const expectedTarget =
     String(metadata.url || "") === identity.url;
@@ -109,14 +114,45 @@ export function completeTabNavigation(identity, metadata) {
     );
   }
 
+  if (documentId) identity.documentId = documentId;
+  else delete identity.documentId;
   return updateTabIdentity(identity, metadata);
 }
 
-export function resolveTabIdentity(identity, tabs) {
+export function resolveTabIdentity(identity, tabs, inspectDocument) {
+  if (identity.closed) {
+    throw new Error("stale_tab_handle: tab closed " + identity.id);
+  }
+
   const candidates = tabs.filter(tab =>
     tabWindowId(tab.id) === identity.windowId
   );
   const current = candidates.find(tab => tab.id === identity.id);
+
+  // Coordinates and URLs can both be reused after an external tab closure.
+  // Once verified, a document must never be replaced by a URL-only match.
+  if (identity.documentId && inspectDocument) {
+    const possible = [current, ...candidates.filter(tab =>
+      tab !== current && String(tab.url || "") === identity.url
+    )].filter(Boolean);
+
+    for (const candidate of possible) {
+      try {
+        const state = inspectDocument(candidate.id);
+
+        if (
+          state.documentId === identity.documentId &&
+          state.url === String(candidate.url || "")
+        ) {
+          return updateTabIdentity(identity, candidate);
+        }
+      } catch (error) {
+        // An unreadable document cannot prove tab identity.
+      }
+    }
+
+    throw new Error("stale_tab_handle: verified document not found " + identity.id);
+  }
 
   if (current && String(current.url || "") === identity.url) {
     return updateTabIdentity(identity, current);
@@ -143,8 +179,13 @@ export function resolveTabForUrlWait(
   identity,
   tabs,
   expected,
-  exact
+  exact,
+  inspectDocument
 ) {
+  if (identity.closed) {
+    throw new Error("stale_tab_handle: tab closed " + identity.id);
+  }
+
   const matches = tab => {
     const url = String(tab.url || "");
 
@@ -153,8 +194,9 @@ export function resolveTabForUrlWait(
   let bound = null;
 
   try {
-    bound = resolveTabIdentity(identity, tabs);
+    bound = resolveTabIdentity(identity, tabs, inspectDocument);
   } catch (error) {
+    if (identity.documentId) throw error;
     // The bound tab may be navigating to the expected URL.
   }
 

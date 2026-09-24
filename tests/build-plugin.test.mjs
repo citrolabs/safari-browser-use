@@ -72,7 +72,7 @@ test("builds a self-contained JXA MCP server", async t => {
   assert.match(bundle, /resolvedTabs = listTabs\(\)/);
   assert.match(
     bundle,
-    /resolveTabIdentity\(params\.tabIdentity, resolvedTabs\)/
+    /resolveTabIdentity\(params\.tabIdentity, resolvedTabs, inspectControlledDocument\)/
   );
   assert.match(
     bundle,
@@ -137,4 +137,7 @@ test("builds a self-contained JXA MCP server", async t => {
   assert.doesNotMatch(bundle, /\bimport\s/);
   assert.doesNotMatch(bundle, /\brequire\s*\(/);
   assert.doesNotMatch(bundle, /node:/);
+  for (const symbol of ["createWebmcpStore", "patchedFetch", "webmcpMemoryDirectory"]) {
+    assert.equal(bundle.includes(symbol), false, `${symbol} must not ship in the runtime`);
+  }
 });

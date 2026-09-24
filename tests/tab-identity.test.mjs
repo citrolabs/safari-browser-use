@@ -66,6 +66,15 @@ test("skips Safari windows whose tab collection fails", async () => {
   );
 });
 
+test("skips a tab that disappears while Safari metadata is being collected", async () => {
+  const { collectTabs } = await loadTabIdentity();
+  const result = collectTabs([{}], () => ["first", "closed", "last"], (window, tab, index) => {
+    if (tab === "closed") throw new Error("Invalid index");
+    return { id: `1:${index}`, title: tab };
+  });
+  assert.deepEqual(result, [{ id: "1:1", title: "first" }, { id: "1:3", title: "last" }]);
+});
+
 test("reacquires a tab after its Safari index changes", async () => {
   const {
     createTabIdentity,
@@ -110,6 +119,51 @@ test("never rebinds a stale handle to an unrelated tab", async () => {
   );
 });
 
+test("follows a URL change only when the bound document is unchanged", async () => {
+  const { createTabIdentity, resolveTabIdentity } = await loadTabIdentity();
+  const identity = createTabIdentity({ id: "63176:8", url: "https://example.com/上海" });
+  identity.documentId = "same-document";
+  const current = { id: identity.id, url: "https://example.com/上海市" };
+
+  assert.equal(resolveTabIdentity(identity, [current], () => ({
+    documentId: "same-document", url: current.url
+  })), current);
+  assert.equal(identity.url, current.url);
+});
+
+test("does not adopt a shifted tab with another document", async () => {
+  const { createTabIdentity, resolveTabIdentity } = await loadTabIdentity();
+  const identity = createTabIdentity({ id: "63176:8", url: "https://example.com/上海" });
+  identity.documentId = "original-document";
+  assert.throws(() => resolveTabIdentity(identity, [{
+    id: identity.id, url: "https://example.com/上海市"
+  }], () => ({ documentId: "different-document", url: "https://example.com/上海市" })), /stale_tab_handle/);
+});
+
+test("keeps the verified document when a sibling still has its previous URL", async () => {
+  const { createTabIdentity, resolveTabIdentity } = await loadTabIdentity();
+  const identity = createTabIdentity({ id: "63176:8", url: "https://example.com/search" });
+  identity.documentId = "search-document";
+  const current = { id: identity.id, url: "https://example.com/search?q=Shanghai" };
+  const sibling = { id: "63176:9", url: identity.url };
+  const result = resolveTabIdentity(identity, [current, sibling], id => ({
+    documentId: id === current.id ? "search-document" : "sibling-document", url: current.url
+  }));
+  assert.equal(result.id, current.id);
+  assert.equal(identity.url, current.url);
+});
+
+test("a URL wait uses document identity before a sibling's matching old URL", async () => {
+  const { createTabIdentity, resolveTabForUrlWait } = await loadTabIdentity();
+  const identity = createTabIdentity({ id: "63176:8", url: "https://example.com/search" });
+  identity.documentId = "search-document";
+  const current = { id: identity.id, url: "https://example.com/search?q=Shanghai" };
+  const sibling = { id: "63176:9", url: identity.url };
+  assert.equal(resolveTabForUrlWait(identity, [current, sibling], current.url, true, id => ({
+    documentId: id === current.id ? "search-document" : "sibling-document", url: current.url
+  })), current);
+});
+
 test("does not recover a stale handle by origin alone", async () => {
   const {
     createTabIdentity,
@@ -131,6 +185,45 @@ test("does not recover a stale handle by origin alone", async () => {
     ]),
     /stale_tab_handle/
   );
+});
+
+test("finds the verified document after an external close shifts identical tabs", async () => {
+  const { createTabIdentity, resolveTabIdentity } = await loadTabIdentity();
+  const url = "https://example.com/form";
+  const identity = createTabIdentity({ id: "1:2", url });
+  identity.documentId = "original";
+  const tabs = [{ id: "1:1", url }, { id: "1:2", url }];
+  const inspect = id => ({ url, documentId: id === "1:1" ? "original" : "sibling" });
+  assert.equal(resolveTabIdentity(identity, tabs, inspect).id, "1:1");
+});
+
+test("does not adopt an identical sibling when the original closes externally", async () => {
+  const { createTabIdentity, resolveTabIdentity } = await loadTabIdentity();
+  const url = "https://example.com/form";
+  const identity = createTabIdentity({ id: "1:2", url });
+  identity.documentId = "original";
+  assert.throws(() => resolveTabIdentity(identity, [{ id: "1:2", url }], () => ({
+    url, documentId: "sibling"
+  })), /stale_tab_handle/);
+});
+
+test("a failed document read cannot fall back to a matching URL", async () => {
+  const { createTabIdentity, resolveTabIdentity } = await loadTabIdentity();
+  const url = "https://example.com/form";
+  const identity = createTabIdentity({ id: "1:2", url });
+  identity.documentId = "original";
+  assert.throws(() => resolveTabIdentity(identity, [{ id: "1:2", url }], () => {
+    throw new Error("page unavailable");
+  }), /stale_tab_handle/);
+});
+
+test("URL wait rejects an unrelated destination after the original closes", async () => {
+  const { createTabIdentity, resolveTabForUrlWait } = await loadTabIdentity();
+  const identity = createTabIdentity({ id: "1:2", url: "https://example.com/form" });
+  identity.documentId = "original";
+  const url = "https://example.com/done";
+  assert.throws(() => resolveTabForUrlWait(identity, [{ id: "1:2", url }], url, true,
+    () => ({ url, documentId: "sibling" })), /stale_tab_handle/);
 });
 
 test("rejects ambiguous exact URL recovery", async () => {

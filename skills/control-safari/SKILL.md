@@ -1,6 +1,6 @@
 ---
 name: control-safari
-description: Control the user's existing Safari 26 session through a persistent script-driven JavaScript REPL. Use for inspecting, navigating, clicking, filling, selecting, uploading, or verifying webpages in Safari when an MCP/plugin transport is unavailable.
+description: Control the user's existing Safari session through a persistent script-driven JavaScript REPL. Use for inspecting, navigating, clicking, filling, selecting, uploading, or verifying webpages in Safari when an MCP/plugin transport is unavailable.
 ---
 
 # Control Safari
@@ -24,8 +24,9 @@ node {baseDir}/scripts/safari-repl.mjs doctor --session SESSION_ID
 node {baseDir}/scripts/safari-repl.mjs documentation --session SESSION_ID
 ```
 
-Stop if the doctor reports that Safari 26 automation or JavaScript from Apple
-Events is unavailable.
+Stop if the doctor reports `ready: false`. Safari 27 on macOS 27 uses this same
+runtime. An `unverified` Safari version status alone does not stop automation;
+follow the Automation and JavaScript from Apple Events capability results.
 
 ## Run
 
